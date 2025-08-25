@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora Bolsa CLM</title>
 
+<!-- Tailwind CSS para diseño moderno -->
 <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 
@@ -36,14 +37,21 @@
   <div id="result" class="mt-6 p-4 border rounded bg-purple-50 text-gray-800 text-center text-lg font-semibold"></div>
 </div>
 
-<!-- PDF.js UMD compatible navegador -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js"></script>
+<!-- PDF.js UMD con callback para cargar app.js después -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js" onload="initPdfJs()"></script>
+
 <script>
-  // Variable global pdfjsLib para app.js
+function initPdfJs() {
+  // Definir variable global pdfjsLib
   window.pdfjsLib = pdfjsLib;
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.worker.min.js';
+  
+  // Cargar app.js solo después de que pdf.js esté listo
+  const script = document.createElement('script');
+  script.src = 'app.js';
+  document.body.appendChild(script);
+}
 </script>
 
-<script src="app.js"></script>
 </body>
 </html>
