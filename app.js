@@ -84,4 +84,15 @@ calculateBtn.addEventListener('click', async () => {
       .filter(r => r.surname.toLowerCase() === searchSurname);
 
     if (results.length > 0) {
-      let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surnam
+      let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
+      resultDiv.innerHTML = html;
+    } else {
+      resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
+    }
+
+  } catch (err) {
+    resultDiv.innerText = "Error leyendo los PDFs. Revisa la conexión o los archivos.";
+    console.error(err);
+  }
+});
+
