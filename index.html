@@ -5,14 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora Bolsa CLM</title>
 
-<!-- Tailwind CSS -->
+<!-- Tailwind CSS seguro -->
 <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+
+<style>
+/* Spinner animado */
+#loader {
+  border: 8px solid #f3f3f3;
+  border-top: 8px solid #7c3aed; /* morado */
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  animation: spin 1s linear infinite;
+  margin: auto;
+  margin-top: 20%;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
 
 </head>
-<body class="bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 min-h-screen flex items-center justify-center p-4">
+<body class="bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 min-h-screen flex items-center justify-center">
 
-<div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
+<!-- Loader -->
+<div id="loader"></div>
+
+<!-- Contenedor principal oculto hasta que todo cargue -->
+<div id="app" class="hidden bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
   <h1 class="text-3xl font-bold mb-6 text-center text-purple-700">Calculadora Bolsa CLM</h1>
 
   <div class="space-y-4">
@@ -37,112 +58,113 @@
   <div id="result" class="mt-6 p-4 border rounded bg-purple-50 text-gray-800 text-center text-lg font-semibold"></div>
 </div>
 
-<!-- PDF.js UMD con callback -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js" onload="initApp()"></script>
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js"></script>
 
 <script>
-function initApp() {
+(async function() {
   // Configurar pdf.js
   window.pdfjsLib = pdfjsLib;
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.worker.min.js';
 
-  // Esperar a que el DOM esté listo
-  document.addEventListener('DOMContentLoaded', () => {
+  const BAG_ORD_URL = "./ordinaria.pdf";
+  const BAG_RES_URL = "./reserva.pdf";
+  const AWARD_URL = "./adjudicados.pdf";
 
-    const BAG_ORD_URL = "./pdf/bolsa_ordinaria.pdf";
-    const BAG_RES_URL = "./pdf/bolsa_reserva.pdf";
-    const AWARD_URL = "./pdf/adjudicacion.pdf";
+  const loader = document.getElementById('loader');
+  const appDiv = document.getElementById('app');
+  const surnameInput = document.getElementById('surname');
+  const includeUnavailableInput = document.getElementById('includeUnavailable');
+  const includeAwardInput = document.getElementById('includeAward');
+  const resultDiv = document.getElementById('result');
+  const calculateBtn = document.getElementById('calculateBtn');
 
-    const surnameInput = document.getElementById('surname');
-    const includeUnavailableInput = document.getElementById('includeUnavailable');
-    const includeAwardInput = document.getElementById('includeAward');
-    const resultDiv = document.getElementById('result');
-    const calculateBtn = document.getElementById('calculateBtn');
+  const parserRegex = /^(?<order>\d+)\s+(?<surname>[\wÁÉÍÓÚáéíóúü]+\s[\wÁÉÍÓÚáéíóúü]+)\s+(?<name>[\wÁÉÍÓÚáéíóúü]+)\s+(?<status>DISPONIBLE|NO DISPONIBLE)/i;
 
-    const parserRegex = /^(?<order>\d+)\s+(?<surname>[\wÁÉÍÓÚáéíóúü]+\s[\wÁÉÍÓÚáéíóúü]+)\s+(?<name>[\wÁÉÍÓÚáéíóúü]+)\s+(?<status>DISPONIBLE|NO DISPONIBLE)/i;
+  async function readPdf(fileUrl) {
+    const data = await fetch(fileUrl).then(res => res.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    return text;
+  }
 
-    async function readPdf(fileUrl) {
-      const data = await fetch(fileUrl).then(res => res.arrayBuffer());
-      const pdf = await pdfjsLib.getDocument({ data }).promise;
-      let text = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        text += content.items.map(item => item.str).join(' ') + '\n';
+  function parseBag(text) {
+    return text.split('\n').map(line => {
+      const match = parserRegex.exec(line);
+      if (match && match.groups) {
+        return {
+          order: parseInt(match.groups.order),
+          surname: match.groups.surname.trim(),
+          name: match.groups.name.trim(),
+          status: match.groups.status.toUpperCase()
+        };
       }
-      return text;
+      return null;
+    }).filter(Boolean);
+  }
+
+  // Mostrar app y ocultar loader
+  loader.style.display = 'none';
+  appDiv.classList.remove('hidden');
+
+  calculateBtn.addEventListener('click', async () => {
+    const searchSurname = surnameInput.value.trim().toLowerCase();
+    if (!searchSurname) {
+      resultDiv.innerText = "Introduce tus apellidos.";
+      return;
     }
 
-    function parseBag(text) {
-      return text.split('\n').map(line => {
-        const match = parserRegex.exec(line);
-        if (match && match.groups) {
-          return {
-            order: parseInt(match.groups.order),
-            surname: match.groups.surname.trim(),
-            name: match.groups.name.trim(),
-            status: match.groups.status.toUpperCase()
-          };
-        }
-        return null;
-      }).filter(Boolean);
-    }
+    resultDiv.innerText = "Calculando...";
 
-    calculateBtn.addEventListener('click', async () => {
-      const searchSurname = surnameInput.value.trim().toLowerCase();
-      if (!searchSurname) {
-        resultDiv.innerText = "Introduce tus apellidos.";
-        return;
+    try {
+      let ordinariaText = await readPdf(BAG_ORD_URL);
+      let reservaText = await readPdf(BAG_RES_URL);
+
+      let ordinaria = parseBag(ordinariaText);
+      let reserva = parseBag(reservaText);
+
+      if (!includeUnavailableInput.checked) {
+        ordinaria = ordinaria.filter(r => r.status === 'DISPONIBLE');
+        reserva = reserva.filter(r => r.status === 'DISPONIBLE');
       }
 
-      resultDiv.innerText = "Calculando...";
+      let bag = ordinaria.concat(reserva);
 
-      try {
-        let ordinariaText = await readPdf(BAG_ORD_URL);
-        let reservaText = await readPdf(BAG_RES_URL);
-
-        let ordinaria = parseBag(ordinariaText);
-        let reserva = parseBag(reservaText);
-
-        if (!includeUnavailableInput.checked) {
-          ordinaria = ordinaria.filter(r => r.status === 'DISPONIBLE');
-          reserva = reserva.filter(r => r.status === 'DISPONIBLE');
-        }
-
-        let bag = ordinaria.concat(reserva);
-
-        if (includeAwardInput.checked) {
-          try {
-            let awardText = await readPdf(AWARD_URL);
-            let award = parseBag(awardText);
-            if (!includeUnavailableInput.checked) {
-              award = award.filter(r => r.status === 'DISPONIBLE');
-            }
-            bag = bag.concat(award);
-          } catch {
-            console.warn("No se pudo cargar adjudicación, se usará solo bolsa");
+      if (includeAwardInput.checked) {
+        try {
+          let awardText = await readPdf(AWARD_URL);
+          let award = parseBag(awardText);
+          if (!includeUnavailableInput.checked) {
+            award = award.filter(r => r.status === 'DISPONIBLE');
           }
+          bag = bag.concat(award);
+        } catch {
+          console.warn("No se pudo cargar adjudicación, se usará solo bolsa");
         }
-
-        const results = bag
-          .map((r, index) => ({ ...r, finalPosition: index + 1 }))
-          .filter(r => r.surname.toLowerCase() === searchSurname);
-
-        if (results.length > 0) {
-          let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
-          resultDiv.innerHTML = html;
-        } else {
-          resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
-        }
-
-      } catch (err) {
-        resultDiv.innerText = "Error leyendo los PDFs. Revisa la conexión o los archivos.";
-        console.error(err);
       }
-    });
 
+      const results = bag
+        .map((r, index) => ({ ...r, finalPosition: index + 1 }))
+        .filter(r => r.surname.toLowerCase() === searchSurname);
+
+      if (results.length > 0) {
+        let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
+        resultDiv.innerHTML = html;
+      } else {
+        resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
+      }
+
+    } catch (err) {
+      resultDiv.innerText = "Error leyendo los PDFs. Revisa la conexión o los archivos.";
+      console.error(err);
+    }
   });
-}
+})();
 </script>
 
 </body>
