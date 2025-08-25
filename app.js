@@ -1,5 +1,6 @@
-const BAG_URL = "https://www.educa.jccm.es/es/bolsatra/bolsa-trabajo-secundaria-regimen-especial/bolsas-ordinarias-reserva-provisionales-curso-2025-2026-cue.ficheros/1075911-20250801%20Bolsa%20ordinaria%20provisional%20cuerpo%200590.pdf";
-const AWARD_URL = "https://www.educa.jccm.es/es/bolsatra/bolsa-trabajo-secundaria-regimen-especial/adjudicacion-definitiva-centralizada-plazas-previa-inicio-4.ficheros/1077121-20250812%20Adjudicados%200590%20%E2%80%93%20Oposici%C3%B3n.pdf"; // Cambiar por URL real
+const BAG_ORD_URL = "./ordinaria.pdf";
+const BAG_RES_URL = "./reserva.pdf";
+const AWARD_URL = "./adjudicados.pdf"; // opcional
 
 const surnameInput = document.getElementById('surname');
 const includeUnavailableInput = document.getElementById('includeUnavailable');
@@ -7,12 +8,11 @@ const includeAwardInput = document.getElementById('includeAward');
 const resultDiv = document.getElementById('result');
 const calculateBtn = document.getElementById('calculateBtn');
 
-// Regex adaptado al PDF real (aprox.)  
-// Debes ajustar si cambia el formato real: aquí tomamos: orden, apellidos y nombre, estado
+// Regex adaptado al PDF real: orden, apellidos, nombre, estado
 const parserRegex = /^(?<order>\d+)\s+(?<surname>[\wÁÉÍÓÚáéíóúü]+\s[\wÁÉÍÓÚáéíóúü]+)\s+(?<name>[\wÁÉÍÓÚáéíóúü]+)\s+(?<status>DISPONIBLE|NO DISPONIBLE)/i;
 
-async function readPdfFromUrl(url) {
-  const data = await fetch(url).then(res => res.arrayBuffer());
+async function readPdf(fileUrl) {
+  const data = await fetch(fileUrl).then(res => res.arrayBuffer());
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -48,34 +48,40 @@ calculateBtn.addEventListener('click', async () => {
   resultDiv.innerText = "Calculando...";
 
   try {
-    let bagText = await readPdfFromUrl(BAG_URL);
-    let bag = parseBag(bagText);
+    // Leer bolsas
+    let ordinariaText = await readPdf(BAG_ORD_URL);
+    let reservaText = await readPdf(BAG_RES_URL);
 
+    let ordinaria = parseBag(ordinariaText);
+    let reserva = parseBag(reservaText);
+
+    // Filtrar NO disponibles si no se incluye
+    if (!includeUnavailableInput.checked) {
+      ordinaria = ordinaria.filter(r => r.status === 'DISPONIBLE');
+      reserva = reserva.filter(r => r.status === 'DISPONIBLE');
+    }
+
+    // Concatenamos ordinaria + reserva
+    let bag = ordinaria.concat(reserva);
+
+    // Añadimos adjudicación si se desea
     if (includeAwardInput.checked) {
       try {
-        let awardText = await readPdfFromUrl(AWARD_URL);
+        let awardText = await readPdf(AWARD_URL);
         let award = parseBag(awardText);
+        if (!includeUnavailableInput.checked) {
+          award = award.filter(r => r.status === 'DISPONIBLE');
+        }
         bag = bag.concat(award);
       } catch {
         console.warn("No se pudo cargar adjudicación, se usará solo bolsa");
       }
     }
 
-    if (!includeUnavailableInput.checked) {
-      bag = bag.filter(row => row.status === 'DISPONIBLE');
-    }
-
-    const results = bag.filter(row => row.surname.toLowerCase() === searchSurname);
+    // Buscar coincidencias por apellidos
+    const results = bag
+      .map((r, index) => ({ ...r, finalPosition: index + 1 }))
+      .filter(r => r.surname.toLowerCase() === searchSurname);
 
     if (results.length > 0) {
-      let html = results.map(r => `Posición: <strong>${r.order}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
-      resultDiv.innerHTML = html;
-    } else {
-      resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
-    }
-
-  } catch (err) {
-    resultDiv.innerText = "Error leyendo los PDFs. Revisa la URL o tu conexión.";
-    console.error(err);
-  }
-});
+      let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surnam
