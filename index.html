@@ -9,13 +9,6 @@
 <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js"></script>
-<script>
-  // Configurar worker de pdf.js
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.worker.min.js';
-</script>
-
 </head>
 <body class="bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 min-h-screen flex items-center justify-center p-4">
 
@@ -44,7 +37,14 @@
   <div id="result" class="mt-6 p-4 border rounded bg-purple-50 text-gray-800 text-center text-lg font-semibold"></div>
 </div>
 
-<!-- Tu script principal -->
+<!-- PDF.js UMD compatible navegador -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js"></script>
+<script>
+  window.pdfjsLib = window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.worker.min.js';
+</script>
+
+<!-- Script principal -->
 <script src="app.js"></script>
 </body>
 </html>
