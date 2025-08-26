@@ -1,171 +1,176 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calculadora Bolsa CLM</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora Bolsa CLM</title>
 
-<!-- Tailwind CSS seguro -->
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
 
-<style>
-/* Spinner animado */
-#loader {
-  border: 8px solid #f3f3f3;
-  border-top: 8px solid #7c3aed; /* morado */
-  border-radius: 50%;
-  width: 60px;
-  height: 60px;
-  animation: spin 1s linear infinite;
-  margin: auto;
-  margin-top: 20%;
-}
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-</style>
-
+  <style>
+    /* Spinner animado */
+    #loader {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #7c3aed;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin: auto;
+      margin-top: 20%;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body class="bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 min-h-screen flex items-center justify-center">
 
-<!-- Loader -->
-<div id="loader"></div>
+  <!-- Loader -->
+  <div id="loader"></div>
 
-<!-- Contenedor principal oculto hasta que todo cargue -->
-<div id="app" class="hidden bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
-  <h1 class="text-3xl font-bold mb-6 text-center text-purple-700">Calculadora Bolsa CLM</h1>
+  <!-- App oculta hasta que cargue -->
+  <div id="app" class="hidden bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
+    <h1 class="text-3xl font-bold mb-6 text-center text-purple-700">Calculadora Bolsa CLM</h1>
 
-  <div class="space-y-4">
-    <div>
-      <label class="block font-medium text-gray-700">Tus apellidos</label>
-      <input type="text" id="surname" class="border p-3 rounded w-full focus:outline-none focus:ring-2 focus:ring-purple-400" placeholder="Ej: Pérez Gómez">
+    <div class="space-y-4">
+      <div>
+        <label class="block font-medium text-gray-700">Tus apellidos</label>
+        <input type="text" id="surname" class="border p-3 rounded w-full focus:outline-none focus:ring-2 focus:ring-purple-400" placeholder="Ej: Pérez Gómez">
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <input type="checkbox" id="includeUnavailable" class="h-5 w-5 text-purple-600">
+        <span class="text-gray-700">Contar también NO disponibles</span>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <input type="checkbox" id="includeAward" class="h-5 w-5 text-pink-600">
+        <span class="text-gray-700">Mirar también adjudicación</span>
+      </div>
+
+      <button id="calculateBtn" class="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition duration-200">Calcular posición</button>
     </div>
 
-    <div class="flex items-center space-x-3">
-      <input type="checkbox" id="includeUnavailable" class="h-5 w-5 text-purple-600">
-      <span class="text-gray-700">Contar también NO disponibles</span>
-    </div>
-
-    <div class="flex items-center space-x-3">
-      <input type="checkbox" id="includeAward" class="h-5 w-5 text-pink-600">
-      <span class="text-gray-700">Mirar también adjudicación</span>
-    </div>
-
-    <button id="calculateBtn" class="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition duration-200">Calcular posición</button>
+    <div id="result" class="mt-6 p-4 border rounded bg-purple-50 text-gray-800 text-center text-lg font-semibold"></div>
   </div>
 
-  <div id="result" class="mt-6 p-4 border rounded bg-purple-50 text-gray-800 text-center text-lg font-semibold"></div>
-</div>
+  <!-- PDF.js (PRIMERO) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js"></script>
-
-<script>
-(async function() {
-  // Configurar pdf.js
-  window.pdfjsLib = pdfjsLib;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.worker.min.js';
-
-  const BAG_ORD_URL = "./ordinaria.pdf";
-  const BAG_RES_URL = "./reserva.pdf";
-  const AWARD_URL = "./adjudicados.pdf";
-
-  const loader = document.getElementById('loader');
-  const appDiv = document.getElementById('app');
-  const surnameInput = document.getElementById('surname');
-  const includeUnavailableInput = document.getElementById('includeUnavailable');
-  const includeAwardInput = document.getElementById('includeAward');
-  const resultDiv = document.getElementById('result');
-  const calculateBtn = document.getElementById('calculateBtn');
-
-  const parserRegex = /^(?<order>\d+)\s+(?<surname>[\wÁÉÍÓÚáéíóúü]+\s[\wÁÉÍÓÚáéíóúü]+)\s+(?<name>[\wÁÉÍÓÚáéíóúü]+)\s+(?<status>DISPONIBLE|NO DISPONIBLE)/i;
-
-  async function readPdf(fileUrl) {
-    const data = await fetch(fileUrl).then(res => res.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data }).promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(item => item.str).join(' ') + '\n';
-    }
-    return text;
-  }
-
-  function parseBag(text) {
-    return text.split('\n').map(line => {
-      const match = parserRegex.exec(line);
-      if (match && match.groups) {
-        return {
-          order: parseInt(match.groups.order),
-          surname: match.groups.surname.trim(),
-          name: match.groups.name.trim(),
-          status: match.groups.status.toUpperCase()
-        };
-      }
-      return null;
-    }).filter(Boolean);
-  }
-
-  // Mostrar app y ocultar loader
-  loader.style.display = 'none';
-  appDiv.classList.remove('hidden');
-
-  calculateBtn.addEventListener('click', async () => {
-    const searchSurname = surnameInput.value.trim().toLowerCase();
-    if (!searchSurname) {
-      resultDiv.innerText = "Introduce tus apellidos.";
+  <!-- Script de la app (DESPUÉS) -->
+  <script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    // ✅ asegurar que pdfjsLib existe
+    if (!window['pdfjsLib']) {
+      console.error("⚠️ pdfjsLib no cargó bien");
       return;
     }
 
-    resultDiv.innerText = "Calculando...";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-    try {
-      let ordinariaText = await readPdf(BAG_ORD_URL);
-      let reservaText = await readPdf(BAG_RES_URL);
+    const BAG_ORD_URL = "./pdf/bolsa_ordinaria.pdf";
+    const BAG_RES_URL = "./pdf/bolsa_reserva.pdf";
+    const AWARD_URL   = "./pdf/adjudicacion.pdf";
 
-      let ordinaria = parseBag(ordinariaText);
-      let reserva = parseBag(reservaText);
+    const loader = document.getElementById('loader');
+    const appDiv = document.getElementById('app');
+    const surnameInput = document.getElementById('surname');
+    const includeUnavailableInput = document.getElementById('includeUnavailable');
+    const includeAwardInput = document.getElementById('includeAward');
+    const resultDiv = document.getElementById('result');
+    const calculateBtn = document.getElementById('calculateBtn');
 
-      if (!includeUnavailableInput.checked) {
-        ordinaria = ordinaria.filter(r => r.status === 'DISPONIBLE');
-        reserva = reserva.filter(r => r.status === 'DISPONIBLE');
+    const parserRegex = /^(?<order>\d+)\s+(?<surname>[\wÁÉÍÓÚáéíóúü]+\s[\wÁÉÍÓÚáéíóúü]+)\s+(?<name>[\wÁÉÍÓÚáéíóúü]+)\s+(?<status>DISPONIBLE|NO DISPONIBLE)/i;
+
+    async function readPdf(fileUrl) {
+      const data = await fetch(fileUrl).then(res => res.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item => item.str).join(' ') + '\n';
       }
-
-      let bag = ordinaria.concat(reserva);
-
-      if (includeAwardInput.checked) {
-        try {
-          let awardText = await readPdf(AWARD_URL);
-          let award = parseBag(awardText);
-          if (!includeUnavailableInput.checked) {
-            award = award.filter(r => r.status === 'DISPONIBLE');
-          }
-          bag = bag.concat(award);
-        } catch {
-          console.warn("No se pudo cargar adjudicación, se usará solo bolsa");
-        }
-      }
-
-      const results = bag
-        .map((r, index) => ({ ...r, finalPosition: index + 1 }))
-        .filter(r => r.surname.toLowerCase() === searchSurname);
-
-      if (results.length > 0) {
-        let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
-        resultDiv.innerHTML = html;
-      } else {
-        resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
-      }
-
-    } catch (err) {
-      resultDiv.innerText = "Error leyendo los PDFs. Revisa la conexión o los archivos.";
-      console.error(err);
+      return text;
     }
+
+    function parseBag(text) {
+      return text.split('\n').map(line => {
+        const match = parserRegex.exec(line);
+        if (match && match.groups) {
+          return {
+            order: parseInt(match.groups.order),
+            surname: match.groups.surname.trim(),
+            name: match.groups.name.trim(),
+            status: match.groups.status.toUpperCase()
+          };
+        }
+        return null;
+      }).filter(Boolean);
+    }
+
+    // Ocultar loader y mostrar app
+    loader.style.display = 'none';
+    appDiv.classList.remove('hidden');
+
+    calculateBtn.addEventListener('click', async () => {
+      const searchSurname = surnameInput.value.trim().toLowerCase();
+      if (!searchSurname) {
+        resultDiv.innerText = "Introduce tus apellidos.";
+        return;
+      }
+
+      resultDiv.innerText = "Calculando...";
+
+      try {
+        let ordinariaText = await readPdf(BAG_ORD_URL);
+        let reservaText = await readPdf(BAG_RES_URL);
+
+        let ordinaria = parseBag(ordinariaText);
+        let reserva = parseBag(reservaText);
+
+        if (!includeUnavailableInput.checked) {
+          ordinaria = ordinaria.filter(r => r.status === 'DISPONIBLE');
+          reserva = reserva.filter(r => r.status === 'DISPONIBLE');
+        }
+
+        let bag = ordinaria.concat(reserva);
+
+        if (includeAwardInput.checked) {
+          try {
+            let awardText = await readPdf(AWARD_URL);
+            let award = parseBag(awardText);
+            if (!includeUnavailableInput.checked) {
+              award = award.filter(r => r.status === 'DISPONIBLE');
+            }
+            bag = bag.concat(award);
+          } catch {
+            console.warn("No se pudo cargar adjudicación, se usará solo bolsa");
+          }
+        }
+
+        const results = bag
+          .map((r, index) => ({ ...r, finalPosition: index + 1 }))
+          .filter(r => r.surname.toLowerCase() === searchSurname);
+
+        if (results.length > 0) {
+          let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
+          resultDiv.innerHTML = html;
+        } else {
+          resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
+        }
+
+      } catch (err) {
+        resultDiv.innerText = "Error leyendo los PDFs. Revisa la conexión o los archivos.";
+        console.error(err);
+      }
+    });
   });
-})();
-</script>
+  </script>
 
 </body>
 </html>
