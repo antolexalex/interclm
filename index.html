@@ -1,176 +1,377 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calculadora Bolsa CLM</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Calculadora posición - Bolsa CLM</title>
 
-  <!-- Tailwind CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
+<!-- Tailwind (CDN) -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
 
-  <style>
-    /* Spinner animado */
-    #loader {
-      border: 8px solid #f3f3f3;
-      border-top: 8px solid #7c3aed;
-      border-radius: 50%;
-      width: 60px;
-      height: 60px;
-      animation: spin 1s linear infinite;
-      margin: auto;
-      margin-top: 20%;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  </style>
+<style>
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+  .spinner {
+    width:72px; height:72px; border-radius:9999px;
+    border:8px solid rgba(0,0,0,0.08); border-top-color:#7c3aed;
+    animation: spin 1s linear infinite; margin:auto;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .small { font-size:0.9rem }
+  pre.debug { max-height:220px; overflow:auto; background:#0b1220; color:#cbd5e1; padding:12px; border-radius:6px; }
+</style>
 </head>
-<body class="bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 min-h-screen flex items-center justify-center">
+<body class="bg-gradient-to-r from-sky-50 via-violet-50 to-pink-50 min-h-screen flex items-start justify-center py-12">
 
-  <!-- Loader -->
-  <div id="loader"></div>
+<div id="root" class="w-full max-w-3xl mx-auto px-4">
 
-  <!-- App oculta hasta que cargue -->
-  <div id="app" class="hidden bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
-    <h1 class="text-3xl font-bold mb-6 text-center text-purple-700">Calculadora Bolsa CLM</h1>
-
-    <div class="space-y-4">
-      <div>
-        <label class="block font-medium text-gray-700">Tus apellidos</label>
-        <input type="text" id="surname" class="border p-3 rounded w-full focus:outline-none focus:ring-2 focus:ring-purple-400" placeholder="Ej: Pérez Gómez">
-      </div>
-
-      <div class="flex items-center space-x-3">
-        <input type="checkbox" id="includeUnavailable" class="h-5 w-5 text-purple-600">
-        <span class="text-gray-700">Contar también NO disponibles</span>
-      </div>
-
-      <div class="flex items-center space-x-3">
-        <input type="checkbox" id="includeAward" class="h-5 w-5 text-pink-600">
-        <span class="text-gray-700">Mirar también adjudicación</span>
-      </div>
-
-      <button id="calculateBtn" class="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition duration-200">Calcular posición</button>
-    </div>
-
-    <div id="result" class="mt-6 p-4 border rounded bg-purple-50 text-gray-800 text-center text-lg font-semibold"></div>
+  <div id="loaderWrap" class="flex flex-col items-center gap-6">
+    <div class="spinner" aria-hidden></div>
+    <div class="text-center text-gray-600">Inicializando lector de PDFs…</div>
   </div>
 
-  <!-- PDF.js (PRIMERO) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+  <main id="app" class="hidden bg-white rounded-2xl shadow-2xl p-8">
+    <h1 class="text-2xl font-bold text-violet-700 mb-4">Calculadora posición — Bolsa CLM</h1>
 
-  <!-- Script de la app (DESPUÉS) -->
-  <script>
-  document.addEventListener("DOMContentLoaded", async () => {
-    // ✅ asegurar que pdfjsLib existe
-    if (!window['pdfjsLib']) {
-      console.error("⚠️ pdfjsLib no cargó bien");
+    <p class="small text-gray-600 mb-4">Busca por <strong>apellidos</strong>. Puedes marcar "Mirar adjudicados" para excluir/contar adjudicados.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium mb-1">Apellidos</label>
+        <input id="inputSurname" type="text" placeholder="Ej: LOPEZ CONCEPCION" class="w-full border rounded p-2" />
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-sm font-medium mb-1 invisible">Acciones</label>
+        <button id="btnSearch" class="w-full bg-violet-600 text-white p-2 rounded font-semibold hover:bg-violet-700">Buscar</button>
+        <button id="btnDebugToggle" class="w-full border p-2 rounded text-sm">Ver diagnóstico (debug)</button>
+      </div>
+    </div>
+
+    <div class="flex gap-4 items-center mb-4 text-sm">
+      <label class="inline-flex items-center gap-2"><input id="chkIncludeUnavailable" type="checkbox" /> Contar NO disponibles</label>
+      <label class="inline-flex items-center gap-2"><input id="chkIncludeAward" type="checkbox" /> Mirar también adjudicados</label>
+    </div>
+
+    <div id="summary" class="mb-4 text-sm text-gray-700"></div>
+
+    <div id="matches" class="mb-4"></div>
+
+    <div id="resultPanel" class="bg-violet-50 p-4 rounded hidden">
+      <div id="resultHtml" class="prose"></div>
+    </div>
+
+    <hr class="my-4">
+
+    <details id="debug" class="text-sm" style="display:none">
+      <summary class="cursor-pointer py-2 font-medium">Información de diagnóstico</summary>
+      <div class="mt-2 space-y-3">
+        <div>
+          <div class="font-semibold">Especialidades detectadas (ordinaria)</div>
+          <pre id="dbgOrdinaria" class="debug"></pre>
+        </div>
+        <div>
+          <div class="font-semibold">Especialidades detectadas (reserva)</div>
+          <pre id="dbgReserva" class="debug"></pre>
+        </div>
+        <div>
+          <div class="font-semibold">Primeros 1200 caracteres (ordinaria) - texto extraído</div>
+          <pre id="dbgText" class="debug"></pre>
+        </div>
+      </div>
+    </details>
+
+    <div class="mt-6 text-xs text-gray-500">
+      Nota: si falta alguna especialidad o ves resultados incorrectos, abre el diagnóstico y pegame aquí lo que salga para ajustar la extracción exacta.
+    </div>
+  </main>
+</div>
+
+<!-- PDF.js (cargamos primero) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<script>
+/* ------------------------------
+   App JS: extracción y UI
+   ------------------------------ */
+
+(async function app() {
+  // URLs relativas (archivos en el repo)
+  const URLS = {
+    ordinaria: './ordinaria.pdf',
+    reserva: './reserva.pdf',
+    adjudicados: './adjudicados.pdf'
+  };
+
+  // UI refs
+  const loaderWrap = document.getElementById('loaderWrap');
+  const appMain = document.getElementById('app');
+  const inputSurname = document.getElementById('inputSurname');
+  const btnSearch = document.getElementById('btnSearch');
+  const btnDebugToggle = document.getElementById('btnDebugToggle');
+  const chkIncludeUnavailable = document.getElementById('chkIncludeUnavailable');
+  const chkIncludeAward = document.getElementById('chkIncludeAward');
+  const summary = document.getElementById('summary');
+  const matchesDiv = document.getElementById('matches');
+  const resultPanel = document.getElementById('resultPanel');
+  const resultHtml = document.getElementById('resultHtml');
+  const debugEl = document.getElementById('debug');
+  const dbgOrdinaria = document.getElementById('dbgOrdinaria');
+  const dbgReserva = document.getElementById('dbgReserva');
+  const dbgText = document.getElementById('dbgText');
+
+  // comprobar pdfjs
+  if (!window.pdfjsLib) {
+    loaderWrap.innerHTML = '<div class="text-red-600">Error cargando pdf.js — revisa conexión/CDN</div>';
+    return;
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // helpers de normalización
+  function normalize(s){
+    return (s||'').toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/\s+/g,' ').trim();
+  }
+
+  // lee PDF y devuelve texto normalizado
+  async function extractTextFromPdf(url){
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('PDF not found: ' + url);
+    const buf = await resp.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    let out = '';
+    for (let p=1; p<=pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      out += ' \n' + content.items.map(it => it.str).join(' ');
+    }
+    return normalize(out);
+  }
+
+  // heurística para dividir por especialidades y filas
+  // devuelve { specialtyName: [ {order, name, rawLine, status} , ... ] }
+  function parseBySpecialty(fullText){
+    const lines = fullText.split(/\n/).map(l=>l.trim()).filter(Boolean);
+    const specialties = {};
+    let currentSpec = 'GENERAL';
+    // heurística: detectamos líneas encabezado de especialidad
+    //  - líneas en mayúsculas largas y sin dígitos, o que contengan palabras clave como 'ESPECIALIDAD' o 'CUERPO'
+    for (let i=0;i<lines.length;i++){
+      const line = lines[i];
+      const isHeader = (
+        /^[A-ZÁÉÍÓÚÑÜ \-()]{4,120}$/.test(line) && !/\d/.test(line)
+      ) || /ESPECIALIDAD|CUERPO|CONCURSO|BOLSA/.test(line);
+      if (isHeader) {
+        // limpiar header
+        const header = line.replace(/\s{2,}/g,' ').trim();
+        currentSpec = header;
+        if (!specialties[currentSpec]) specialties[currentSpec]=[];
+        continue;
+      }
+      // intentar detectar filas: comienzan por número de orden
+      const m = line.match(/^\s*(\d{1,4})\s+(.+)$/);
+      if (m){
+        const order = parseInt(m[1],10);
+        const rest = m[2].trim();
+        // intentar extraer estado (DISPONIBLE / NO DISPONIBLE / NO DISPONIBLE)
+        let status = 'DISPONIBLE';
+        let rawName = rest;
+        const sMatch = rest.match(/\b(NO DISPONIBLE|NO_DISPONIBLE|NO-DISPONIBLE|NOAD|DISPONIBLE)\b/);
+        if (sMatch){
+          const s = sMatch[1];
+          if (/NO/.test(s)) status='NO DISPONIBLE';
+          rawName = rest.replace(sMatch[0],'').trim();
+        }
+        // a veces aparecen identificadores (DNI) u otras columnas; recortamos si hay muchas columnas
+        // normalizamos espacios
+        rawName = rawName.replace(/\s{2,}/g,' ').trim();
+        specialties[currentSpec] = specialties[currentSpec] || [];
+        specialties[currentSpec].push({ order, name: rawName, rawLine: line, status });
+      } else {
+        // puede ser línea continuada de nombre: si la línea anterior acabó en coma o no había status, la pegamos
+        const lastList = specialties[currentSpec];
+        if (lastList && lastList.length){
+          // si la línea actual parece complemento de la anterior (contiene comas o es pocas palabras), lo añadimos
+          if (/^[A-ZÁÉÍÓÚÑÜ \-.,']{1,80}$/.test(line) && !/\d/.test(line)){
+            lastList[lastList.length-1].name += ' ' + line;
+            lastList[lastList.length-1].rawLine += ' ' + line;
+          }
+        }
+      }
+    }
+    return specialties;
+  }
+
+  // función para calcular posiciones acumuladas: devuelve estructura por especialidad con final positions
+  function buildFinalLists(specOrdinaria, specReserva, includeUnavailable){
+    // specOrdinaria, specReserva: arrays of rows as parsed
+    const ordFiltered = includeUnavailable ? specOrdinaria.slice() : specOrdinaria.filter(r=>r.status==='DISPONIBLE');
+    const resFiltered = includeUnavailable ? specReserva.slice() : specReserva.filter(r=>r.status==='DISPONIBLE');
+    // ordenar por order (por si)
+    ordFiltered.sort((a,b)=>a.order-b.order);
+    resFiltered.sort((a,b)=>a.order-b.order);
+    const final = [];
+    ordFiltered.forEach((r,i)=> final.push({...r, source:'ORDINARIA', indexInSource:i, finalPosition: final.length+1}));
+    resFiltered.forEach((r,i)=> final.push({...r, source:'RESERVA', indexInSource:i, finalPosition: final.length+1}));
+    return final;
+  }
+
+  // ------------- main init: extraer y parsear -------------
+  let textOrd='', textRes='', textAdj='';
+  try {
+    // mostrar mensaje mientras descarga (loader permanece visible)
+    summary.innerText = 'Descargando y analizando PDFs (puede tardar unos segundos)…';
+    // extraer
+    textOrd = await extractTextFromPdf(URLS.ordinaria);
+    textRes = await extractTextFromPdf(URLS.reserva);
+    // adjudicados puede no existir, lo intentamos pero no es fatal
+    try {
+      textAdj = await extractTextFromPdf(URLS.adjudicados);
+    } catch(e){
+      textAdj = '';
+    }
+  } catch(e){
+    loaderWrap.innerHTML = '<div class="text-red-600">No se pudieron leer los PDFs. Revisa que los archivos estén en la ruta correcta (./ordinaria.pdf, ./reserva.pdf, ./adjudicados.pdf)</div>';
+    console.error(e);
+    return;
+  }
+
+  // parsear por especialidad
+  const parsedOrd = parseBySpecialty(textOrd);
+  const parsedRes = parseBySpecialty(textRes);
+  const parsedAdj = textAdj ? parseBySpecialty(textAdj) : {};
+
+  // preparar selectables de especialidad detectadas (intersección de ord+res)
+  const specialtiesSet = new Set([...Object.keys(parsedOrd), ...Object.keys(parsedRes)]);
+  const specialties = Array.from(specialtiesSet).filter(s=>s && s.length>2);
+
+  // llenar debug
+  dbgOrdinaria.textContent = Object.keys(parsedOrd).slice(0,200).join('\n');
+  dbgReserva.textContent = Object.keys(parsedRes).slice(0,200).join('\n');
+  dbgText.textContent = textOrd.slice(0,1200);
+
+  // ocultar loader y mostrar app
+  loaderWrap.style.display = 'none';
+  appMain.classList.remove('hidden');
+
+  // show basic summary
+  summary.innerHTML = `<strong>Especialidades detectadas:</strong> ${specialties.length} (usa "Ver diagnóstico" para ver la lista completa).`;
+
+  // Debug toggle
+  btnDebugToggle.addEventListener('click', ()=> {
+    debugEl.style.display = debugEl.style.display === 'none' ? 'block' : 'none';
+    debugEl.open = !debugEl.open;
+  });
+
+  // BUSCAR
+  btnSearch.addEventListener('click', async ()=> {
+    resultPanel.classList.add('hidden');
+    resultHtml.innerHTML = '';
+    matchesDiv.innerHTML = '';
+
+    const raw = inputSurname.value || '';
+    const search = normalize(raw);
+    if (!search) { summary.innerHTML = '<span class="text-red-600">Introduce apellidos para buscar</span>'; return; }
+
+    // Para cada especialidad detectada, construir lista final y buscar coincidencias
+    const hits = []; // { spec, row, finalPosition, source }
+    for (const spec of specialties){
+      const ordList = parsedOrd[spec] || [];
+      const resList = parsedRes[spec] || [];
+      const finalList = buildFinalLists(ordList, resList, chkIncludeUnavailable.checked);
+
+      // buscar coincidencias por inclusión sobre el campo name (o surname heurístico)
+      finalList.forEach(row=>{
+        // normalizamos el campo name para buscar apellidos: a menudo el formato es "APELLIDO1 APELLIDO2, NOMBRE" o "APELLIDO1 APELLIDO2 NOMBRE"
+        const normName = normalize(row.name + ' ' + row.rawLine);
+        // si el search aparece dentro del name normalizado -> hit
+        if (normName.includes(search)) {
+          hits.push({ spec, row });
+        } else {
+          // a veces apellidos pueden estar en rawLine separado; también comprobamos rawLine
+          const rawLineNorm = normalize(row.rawLine || '');
+          if (rawLineNorm.includes(search)) hits.push({ spec, row });
+        }
+      });
+    }
+
+    if (hits.length === 0) {
+      summary.innerHTML = `<span class="text-red-600">No se encontraron coincidencias para <strong>${raw}</strong></span>`;
       return;
     }
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-    const BAG_ORD_URL = "./ordinaria.pdf";
-    const BAG_RES_URL = "./reserva.pdf";
-    const AWARD_URL   = "./adjudicados.pdf";
-
-    const loader = document.getElementById('loader');
-    const appDiv = document.getElementById('app');
-    const surnameInput = document.getElementById('surname');
-    const includeUnavailableInput = document.getElementById('includeUnavailable');
-    const includeAwardInput = document.getElementById('includeAward');
-    const resultDiv = document.getElementById('result');
-    const calculateBtn = document.getElementById('calculateBtn');
-
-    const parserRegex = /^(?<order>\d+)\s+(?<surname>[\wÁÉÍÓÚáéíóúü]+\s[\wÁÉÍÓÚáéíóúü]+)\s+(?<name>[\wÁÉÍÓÚáéíóúü]+)\s+(?<status>DISPONIBLE|NO DISPONIBLE)/i;
-
-    async function readPdf(fileUrl) {
-      const data = await fetch(fileUrl).then(res => res.arrayBuffer());
-      const pdf = await pdfjsLib.getDocument({ data }).promise;
-      let text = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        text += content.items.map(item => item.str).join(' ') + '\n';
-      }
-      return text;
-    }
-
-    function parseBag(text) {
-      return text.split('\n').map(line => {
-        const match = parserRegex.exec(line);
-        if (match && match.groups) {
-          return {
-            order: parseInt(match.groups.order),
-            surname: match.groups.surname.trim(),
-            name: match.groups.name.trim(),
-            status: match.groups.status.toUpperCase()
-          };
-        }
-        return null;
-      }).filter(Boolean);
-    }
-
-    // Ocultar loader y mostrar app
-    loader.style.display = 'none';
-    appDiv.classList.remove('hidden');
-
-    calculateBtn.addEventListener('click', async () => {
-      const searchSurname = surnameInput.value.trim().toLowerCase();
-      if (!searchSurname) {
-        resultDiv.innerText = "Introduce tus apellidos.";
-        return;
-      }
-
-      resultDiv.innerText = "Calculando...";
-
-      try {
-        let ordinariaText = await readPdf(BAG_ORD_URL);
-        let reservaText = await readPdf(BAG_RES_URL);
-
-        let ordinaria = parseBag(ordinariaText);
-        let reserva = parseBag(reservaText);
-
-        if (!includeUnavailableInput.checked) {
-          ordinaria = ordinaria.filter(r => r.status === 'DISPONIBLE');
-          reserva = reserva.filter(r => r.status === 'DISPONIBLE');
-        }
-
-        let bag = ordinaria.concat(reserva);
-
-        if (includeAwardInput.checked) {
-          try {
-            let awardText = await readPdf(AWARD_URL);
-            let award = parseBag(awardText);
-            if (!includeUnavailableInput.checked) {
-              award = award.filter(r => r.status === 'DISPONIBLE');
-            }
-            bag = bag.concat(award);
-          } catch {
-            console.warn("No se pudo cargar adjudicación, se usará solo bolsa");
-          }
-        }
-
-        const results = bag
-          .map((r, index) => ({ ...r, finalPosition: index + 1 }))
-          .filter(r => r.surname.toLowerCase() === searchSurname);
-
-        if (results.length > 0) {
-          let html = results.map(r => `Posición: <strong>${r.finalPosition}</strong> - ${r.surname} ${r.name} (${r.status})`).join('<br>');
-          resultDiv.innerHTML = html;
-        } else {
-          resultDiv.innerText = "No se encontraron coincidencias para tus apellidos.";
-        }
-
-      } catch (err) {
-        resultDiv.innerText = "Error leyendo los PDFs. Revisa la conexión o los archivos.";
-        console.error(err);
-      }
+    // Agrupar hits por especialidad
+    const grouped = {};
+    hits.forEach(h=>{
+      grouped[h.spec] = grouped[h.spec] || [];
+      grouped[h.spec].push(h.row);
     });
+
+    // Construir UI de selección por especialidad (si hay >1)
+    matchesDiv.innerHTML = '';
+    Object.keys(grouped).forEach(spec => {
+      const rows = grouped[spec];
+      const box = document.createElement('div');
+      box.className = 'mb-3 p-3 border rounded bg-white';
+      box.innerHTML = `<div class="font-semibold">${spec} — coincidencias: ${rows.length}</div>`;
+      rows.forEach(r=>{
+        const btn = document.createElement('button');
+        btn.className = 'mt-2 block w-full text-left p-2 rounded border hover:bg-violet-50 small';
+        btn.innerHTML = `Pos en su lista: <strong>${r.order}</strong> — ${escapeHtml(r.name)} — <em>${r.status}</em>`;
+        btn.addEventListener('click', ()=> showFinalPosition(spec, r));
+        box.appendChild(btn);
+      });
+      matchesDiv.appendChild(box);
+    });
+
+    summary.innerHTML = `<strong>${hits.length}</strong> coincidencia(s) encontradas. Selecciona la correcta para ver la posición acumulada.`;
   });
-  </script>
+
+  // muestra la posición acumulada y otros datos cuando el usuario selecciona una fila
+  function showFinalPosition(spec, selectedRow){
+    // reconstruir finalList para esa especialidad con opciones actuales
+    const ordList = parsedOrd[spec] || [];
+    const resList = parsedRes[spec] || [];
+    const finalList = buildFinalLists(ordList, resList, chkIncludeUnavailable.checked);
+    // buscar por referencia (coincidir por order + normalized name)
+    const normSel = normalize(selectedRow.name + ' ' + selectedRow.rawLine);
+    const found = finalList.find(f => normalize(f.name + ' ' + f.rawLine) === normSel || f.order === selectedRow.order);
+    if (!found){
+      resultHtml.innerHTML = '<div class="text-red-600">No se pudo calcular la posición — formato inesperado.</div>';
+      resultPanel.classList.remove('hidden');
+      return;
+    }
+    // Componer resultado: indicar si está en ordinaria o reserva y su posición acumulada
+    const pos = found.finalPosition;
+    const source = found.source;
+    // además hay que mostrar cuántos hay en ordinaria y reserva
+    const ordCount = (ordList.filter(r=> chkIncludeUnavailable.checked ? true : r.status==='DISPONIBLE')).length;
+    const resCount = (resList.filter(r=> chkIncludeUnavailable.checked ? true : r.status==='DISPONIBLE')).length;
+    let html = `<div class="text-lg font-semibold">Resultado para <span class="text-violet-800">${escapeHtml(selectedRow.name)}</span></div>`;
+    html += `<div class="mt-2">Especialidad: <strong>${escapeHtml(spec)}</strong></div>`;
+    html += `<div class="mt-1">Fuente: <strong>${source}</strong></div>`;
+    html += `<div class="mt-1">Posición dentro de su bloque (${source === 'ORDINARIA' ? 'ordinaria' : 'reserva'}): <strong>${selectedRow.order}</strong></div>`;
+    html += `<div class="mt-1">Total ordinaria (filtradas): <strong>${ordCount}</strong></div>`;
+    html += `<div class="mt-1">Total reserva (filtradas): <strong>${resCount}</strong></div>`;
+    html += `<div class="mt-2 text-xl">Posición acumulada: <strong class="text-violet-700">${pos}</strong></div>`;
+
+    // indicar si aparece en adjudicados (si está marcada la opción)
+    if (chkIncludeAward.checked && parsedAdj[spec]){
+      const normSelected = normalize(selectedRow.name);
+      const inAdj = parsedAdj[spec].some(a => normalize(a.name + ' ' + a.rawLine).includes(normSelected));
+      if (inAdj) html += `<div class="mt-2 text-sm text-green-700">Aparece también en adjudicados para esta especialidad.</div>`;
+    }
+
+    resultHtml.innerHTML = html;
+    resultPanel.classList.remove('hidden');
+    window.scrollTo({ top: resultPanel.offsetTop - 20, behavior:'smooth' });
+  }
+
+  // small helper
+  function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+})();
+</script>
 
 </body>
 </html>
